@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// Bind to all interfaces and accept any Host header so the hosted web
-// preview proxy can reach the dev server (it forwards a non-localhost host).
-export default defineConfig({
+// `base: './'` on build emits relative asset paths so the app works under any
+// subpath — e.g. a GitHub Pages project URL like /Alcon-Social-Media-Command-Center/.
+// Dev stays at '/' so the hosted preview proxy can reach the server.
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? './' : '/',
   plugins: [react()],
   server: {
     host: true,
@@ -15,4 +17,4 @@ export default defineConfig({
     host: true,
     allowedHosts: true,
   },
-})
+}))
