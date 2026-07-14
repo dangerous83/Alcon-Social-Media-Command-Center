@@ -1,5 +1,6 @@
 import { isThisMonth, isThisWeek, prettyDate, todayKey } from '../lib/dates.js'
 import { platformById } from '../lib/constants.js'
+import QuickImageStudio from './QuickImageStudio.jsx'
 
 function StatCard({ label, value, tone = 'text-white' }) {
   return (
@@ -24,11 +25,16 @@ export default function Dashboard({ clients, posts, onSelectClient, onOpenPost }
 
   return (
     <div className="animate-in mx-auto max-w-6xl">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold tracking-tight text-white">Good to see you 👋</h2>
-        <p className="mt-1 text-white/70">
-          Here's what's happening across all {clients.length} client accounts.
+      <div className="mb-6">
+        <h2 className="text-3xl font-bold tracking-tight text-white">Welcome back 👋</h2>
+        <p className="mt-1 text-white/75">
+          Your home base for {clients.length} client{clients.length === 1 ? '' : 's'}. Make a graphic
+          below, or pick a client on the left to plan their posts.
         </p>
+      </div>
+
+      <div className="mb-6">
+        <QuickImageStudio clients={clients} />
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
