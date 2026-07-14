@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { IMAGE_SIZES } from '../lib/constants.js'
-import { composeStructuredImage } from '../lib/imageGen.js'
+import { BACKGROUND_STYLES, composeStructuredImage } from '../lib/imageGen.js'
 
 // Professional graphic builder on the dashboard. Structured content, top to
 // bottom: logo → eyebrow → heading → paragraph → bullet title → bullets → CTA.
@@ -40,6 +40,7 @@ export default function QuickImageStudio({ clients }) {
   const [bulletsTitle, setBulletsTitle] = useState('')
   const [bulletsText, setBulletsText] = useState('')
   const [cta, setCta] = useState('')
+  const [background, setBackground] = useState('aurora')
   const [sizeId, setSizeId] = useState('ig-square')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -91,6 +92,7 @@ export default function QuickImageStudio({ clients }) {
           bulletsTitle,
           bullets: bulletsText.split('\n'),
           cta,
+          background,
         },
         width: size.w,
         height: size.h,
@@ -263,6 +265,25 @@ export default function QuickImageStudio({ clients }) {
               </select>
             </Field>
           </div>
+
+          <Field step="10" label="Background">
+            <div className="flex flex-wrap gap-2">
+              {BACKGROUND_STYLES.map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => setBackground(b.id)}
+                  className={`rounded-xl border px-3 py-2 text-sm transition-all ${
+                    background === b.id
+                      ? 'border-white/25 bg-white/[0.08] font-semibold text-white'
+                      : 'border-white/10 text-white/75 hover:border-white/20 hover:bg-white/[0.04]'
+                  }`}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+          </Field>
 
           <div className="flex items-center gap-3 pt-1">
             <button type="button" className="btn-primary" disabled={busy} onClick={() => generate(false)}>

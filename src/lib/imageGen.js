@@ -385,6 +385,136 @@ const readableAccent = (hex) => {
   return mixWithWhite(hex, Math.min(0.7, (0.55 - lum) * 1.6 + 0.15))
 }
 
+export const BACKGROUND_STYLES = [
+  { id: 'aurora', label: 'Aurora' },
+  { id: 'mesh', label: 'Mesh' },
+  { id: 'grid', label: 'Tech grid' },
+  { id: 'spotlight', label: 'Spotlight' },
+  { id: 'minimal', label: 'Minimal' },
+  { id: 'solid', label: 'Solid' },
+]
+
+// Additive glow — composites with 'lighter' so brand color adds light to the
+// dark base instead of muddying toward brown.
+function addGlow(ctx, x, y, radius, hex, alpha) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, radius)
+  g.addColorStop(0, rgba(hex, alpha))
+  g.addColorStop(1, rgba(hex, 0))
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
+  ctx.restore()
+}
+
+function fillBase(ctx, w, h, top = '#0A0D16', bottom = '#0E1626') {
+  const base = ctx.createLinearGradient(0, 0, w * 0.35, h)
+  base.addColorStop(0, top)
+  base.addColorStop(1, bottom)
+  ctx.fillStyle = base
+  ctx.fillRect(0, 0, w, h)
+}
+
+// Renders a premium background in one of several styles. Text is drawn left,
+// so every style keeps the left ~60% calm and dark for legibility.
+function drawBackground(ctx, { style, width: w, height: h, c1, c2, palette, rand }) {
+  const reach = Math.max(w, h)
+
+  if (style === 'solid') {
+    fillBase(ctx, w, h, '#0B0F1A', '#0B0F1A')
+    // faint accent hairline down the left edge
+    ctx.fillStyle = rgba(c1, 0.9)
+    ctx.fillRect(0, 0, Math.max(4, w / 220), h)
+    return
+  }
+
+  if (style === 'minimal') {
+    fillBase(ctx, w, h, '#0A0D16', '#0C111E')
+    addGlow(ctx, w * 0.96, h * 0.06, reach * 0.5, c1, 0.28)
+    drawGrain(ctx, w, h, rand, 0.03)
+    return
+  }
+
+  if (style === 'grid') {
+    fillBase(ctx, w, h, '#090C14', '#0C1220')
+    // perspective-free tech grid, fading toward the bottom-left text zone
+    ctx.save()
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)'
+    ctx.lineWidth = Math.max(1, w / 1400)
+    const gap = reach / 16
+    for (let x = gap; x < w; x += gap) {
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, h)
+      ctx.stroke()
+    }
+    for (let y = gap; y < h; y += gap) {
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(w, y)
+      ctx.stroke()
+    }
+    ctx.restore()
+    addGlow(ctx, w * 0.9, h * 0.12, reach * 0.55, c1, 0.3)
+    addGlow(ctx, w * 0.15, h * 0.95, reach * 0.4, c2, 0.16)
+    // fade the grid out on the left where text sits
+    const fade = ctx.createLinearGradient(0, 0, w * 0.7, 0)
+    fade.addColorStop(0, 'rgba(9,12,20,0.85)')
+    fade.addColorStop(1, 'rgba(9,12,20,0)')
+    ctx.fillStyle = fade
+    ctx.fillRect(0, 0, w, h)
+    return
+  }
+
+  if (style === 'spotlight') {
+    fillBase(ctx, w, h, '#0A0E18', '#080B13')
+    addGlow(ctx, w * 0.5, h * -0.12, reach * 0.9, c1, 0.26)
+    addGlow(ctx, w * 0.5, h * -0.12, reach * 0.5, c2, 0.12)
+    drawGrain(ctx, w, h, rand, 0.04)
+    return
+  }
+
+  if (style === 'mesh') {
+    fillBase(ctx, w, h, '#0A0D16', '#0D1424')
+    const cols = palette.length >= 2 ? palette : [c1, c2, c1]
+    const blobs = [
+      { x: 0.9, y: 0.1, r: 0.6, a: 0.3 },
+      { x: 0.1, y: 0.85, r: 0.55, a: 0.24 },
+      { x: 0.75, y: 0.9, r: 0.4, a: 0.16 },
+      { x: 0.35, y: 0.2, r: 0.35, a: 0.12 },
+    ]
+    blobs.forEach((b, i) => addGlow(ctx, w * b.x, h * b.y, reach * b.r, cols[i % cols.length], b.a))
+    drawDotGrid(ctx, w, h, 'rgba(255,255,255,0.04)', rand)
+    drawGrain(ctx, w, h, rand, 0.04)
+    return
+  }
+
+  // default: 'aurora' — smooth diagonal brand bands + soft corner glows
+  fillBase(ctx, w, h, '#0A0D16', '#0D1322')
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  const band = ctx.createLinearGradient(0, 0, w, h)
+  band.addColorStop(0, rgba(c1, 0.14))
+  band.addColorStop(0.5, rgba(c2, 0.05))
+  band.addColorStop(1, rgba(c1, 0.0))
+  ctx.fillStyle = band
+  ctx.fillRect(0, 0, w, h)
+  ctx.restore()
+  addGlow(ctx, w * 0.88, h * 0.05, reach * 0.6, c1, 0.34)
+  addGlow(ctx, w * 0.05, h * 0.92, reach * 0.5, c2, 0.2)
+  // faint concentric arc, top-right
+  ctx.save()
+  ctx.globalCompositeOperation = 'lighter'
+  ctx.lineWidth = Math.max(2, w / 360)
+  ctx.strokeStyle = rgba(c1, 0.18)
+  ctx.beginPath()
+  ctx.arc(w * 1.02, h * -0.02, reach * (0.3 + rand() * 0.08), Math.PI * 0.42, Math.PI * 1.05)
+  ctx.stroke()
+  ctx.restore()
+  drawDotGrid(ctx, w, h, 'rgba(255,255,255,0.045)', rand)
+  drawGrain(ctx, w, h, rand, 0.04)
+}
+
 export async function composeStructuredImage({ content, width, height, client, attempt = 0 }) {
   await ensureFonts()
 
@@ -415,32 +545,27 @@ export async function composeStructuredImage({ content, width, height, client, a
   // On wide banners keep text to ~62% so the composition breathes.
   const contentW = isWide ? Math.round(width * 0.62) : width - pad * 2
 
-  // ---- background: restrained brand wash ----
-  const base = ctx.createLinearGradient(0, 0, width * 0.6, height)
-  base.addColorStop(0, '#0A0D16')
-  base.addColorStop(0.6, '#0D1220')
-  base.addColorStop(1, '#0f1728')
-  ctx.fillStyle = base
+  // ---- background ----
+  drawBackground(ctx, {
+    style: content.background || 'aurora',
+    width,
+    height,
+    c1,
+    c2,
+    palette,
+    rand,
+  })
+  // legibility scrim: darken the left/bottom where text sits, so any background
+  // style keeps strong contrast under the copy
+  const scrim = ctx.createLinearGradient(0, 0, width, 0)
+  scrim.addColorStop(0, 'rgba(7,9,15,0.55)')
+  scrim.addColorStop(0.55, 'rgba(7,9,15,0.15)')
+  scrim.addColorStop(1, 'rgba(7,9,15,0)')
+  ctx.fillStyle = scrim
   ctx.fillRect(0, 0, width, height)
-  const reach = Math.max(width, height)
-  drawGlow(ctx, width * (0.82 + rand() * 0.12), height * (0.04 + rand() * 0.12), reach * 0.62, c1, 0.24)
-  drawGlow(ctx, width * (0.02 + rand() * 0.1), height * (0.88 + rand() * 0.08), reach * 0.55, c2, 0.18)
-  // thin arc accent in a corner, behind everything
-  ctx.save()
-  ctx.lineWidth = Math.max(2, width / 320)
-  const arcGrad = ctx.createLinearGradient(0, 0, width, height)
-  arcGrad.addColorStop(0, rgba(c1, 0.4))
-  arcGrad.addColorStop(1, rgba(c2, 0.18))
-  ctx.strokeStyle = arcGrad
-  ctx.beginPath()
-  ctx.arc(width * 1.02, height * -0.02, reach * (0.28 + rand() * 0.1), Math.PI * 0.42, Math.PI * 1.05)
-  ctx.stroke()
-  ctx.restore()
-  drawDotGrid(ctx, width, height, 'rgba(255,255,255,0.04)', rand)
-  drawGrain(ctx, width, height, rand, 0.04)
-  const vig = ctx.createLinearGradient(0, height * 0.4, 0, height)
+  const vig = ctx.createLinearGradient(0, height * 0.45, 0, height)
   vig.addColorStop(0, 'rgba(7,9,15,0)')
-  vig.addColorStop(1, 'rgba(7,9,15,0.6)')
+  vig.addColorStop(1, 'rgba(7,9,15,0.55)')
   ctx.fillStyle = vig
   ctx.fillRect(0, 0, width, height)
 
