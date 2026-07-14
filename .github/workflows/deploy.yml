@@ -49,17 +49,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for i in $(seq 1 30); do
-            pending=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+          # The API may lag a few seconds before the pages-build-deployment run
+          # for this commit is even listed, so "no run in progress" is NOT proof
+          # it's done. Wait until we positively observe a COMPLETED run for this
+          # exact SHA; only give up after a generous timeout (covers the case
+          # where Pages source has been switched to "GitHub Actions" and the
+          # branch build no longer exists).
+          for i in $(seq 1 24); do
+            completed=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/${{ github.repository }}/actions/runs?head_sha=${{ github.sha }}&per_page=100" \
-              | jq '[.workflow_runs[] | select(.name == "pages-build-deployment") | select(.status != "completed")] | length')
-            if [ "$pending" = "0" ]; then
-              echo "No branch-based Pages build in progress — safe to deploy."
+              | jq '[.workflow_runs[] | select(.name == "pages-build-deployment") | select(.status == "completed")] | length')
+            if [ "${completed:-0}" -ge 1 ] 2>/dev/null; then
+              echo "Branch-based Pages build completed — deploying the built site after it."
               exit 0
             fi
-            echo "Waiting for pages-build-deployment ($pending in progress)…"
+            echo "Branch-based Pages build not finished yet (attempt $i/24)…"
             sleep 10
           done
-          echo "Timed out waiting — deploying anyway."
+          echo "No branch-based Pages build observed within timeout — deploying."
       - id: deployment
         uses: actions/deploy-pages@v4
