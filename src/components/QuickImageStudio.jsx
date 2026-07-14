@@ -1,53 +1,100 @@
 import { useMemo, useRef, useState } from 'react'
 import { IMAGE_SIZES } from '../lib/constants.js'
-import { buildPromptFromBrand, composeBrandImage } from '../lib/imageGen.js'
+import { composeStructuredImage } from '../lib/imageGen.js'
 
-// A friendly, standalone image generator that lives on the dashboard so you can
-// make an on-brand graphic in seconds — no need to create a post first. It uses
-// the same local canvas composer as the post editor.
+// Professional graphic builder on the dashboard. Structured content, top to
+// bottom: logo → eyebrow → heading → paragraph → bullet title → bullets → CTA.
+// Rendered locally on canvas in the selected client's brand colors.
+
+const EXAMPLES = {
+  eyebrow: 'Cyber security tip',
+  heading: 'Start your business now',
+  paragraph: 'Launching is easier than you think. Here is what you need lined up before day one.',
+  bulletsTitle: 'What you get',
+  bullets: '24/7 monitoring\nFree security audit\nDedicated account manager',
+  cta: 'Book a free call →',
+}
+
+function Field({ step, label, optional, children, action }) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <label className="label-caps">
+          {step} · {label}
+          {optional && <span className="ml-1.5 normal-case tracking-normal text-white/40">(optional)</span>}
+        </label>
+        {action}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 export default function QuickImageStudio({ clients }) {
   const [clientId, setClientId] = useState(clients[0]?.id || '')
-  const [headline, setHeadline] = useState('')
-  const [prompt, setPrompt] = useState('')
+  const [logoData, setLogoData] = useState(null)
+  const [logoName, setLogoName] = useState('')
+  const [eyebrow, setEyebrow] = useState('')
+  const [heading, setHeading] = useState('')
+  const [paragraph, setParagraph] = useState('')
+  const [bulletsTitle, setBulletsTitle] = useState('')
+  const [bulletsText, setBulletsText] = useState('')
+  const [cta, setCta] = useState('')
   const [sizeId, setSizeId] = useState('ig-square')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [image, setImage] = useState(null)
   const attemptRef = useRef(0)
+  const fileRef = useRef(null)
 
   const client = useMemo(() => clients.find((c) => c.id === clientId) || clients[0], [clients, clientId])
-  const size = IMAGE_SIZES.find((s) => s.id === sizeId) || IMAGE_SIZES[0]
+  const size = IMAGE_SIZES.find((si) => si.id === sizeId) || IMAGE_SIZES[0]
 
-  // synthetic "post" the composer understands
-  const buildPost = () => ({
-    title: headline.trim() || 'Your headline here',
-    caption: '',
-    platform: size.platform,
-    format: 'Static',
-  })
+  const onLogoFile = (file) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('That file is not an image — please pick a PNG, JPG, SVG or WebP.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      setLogoData(reader.result)
+      setLogoName(file.name)
+      setError(null)
+    }
+    reader.onerror = () => setError('Could not read that file — try another one.')
+    reader.readAsDataURL(file)
+  }
 
-  const writePrompt = () => {
-    if (!client) return
-    setPrompt(buildPromptFromBrand({ post: buildPost(), client, sizeLabel: size.label }))
+  const fillExample = () => {
+    setEyebrow(EXAMPLES.eyebrow)
+    setHeading(EXAMPLES.heading)
+    setParagraph(EXAMPLES.paragraph)
+    setBulletsTitle(EXAMPLES.bulletsTitle)
+    setBulletsText(EXAMPLES.bullets)
+    setCta(EXAMPLES.cta)
     setError(null)
   }
 
   const generate = async (regenerate = false) => {
     if (!client) return
-    const post = buildPost()
-    const effectivePrompt =
-      prompt.trim() || buildPromptFromBrand({ post, client, sizeLabel: size.label })
-    if (!prompt.trim()) setPrompt(effectivePrompt)
     if (regenerate) attemptRef.current += 1
     setBusy(true)
     setError(null)
     try {
-      const img = await composeBrandImage({
-        prompt: effectivePrompt,
+      const img = await composeStructuredImage({
+        content: {
+          logoData,
+          eyebrow,
+          heading,
+          paragraph,
+          bulletsTitle,
+          bullets: bulletsText.split('\n'),
+          cta,
+        },
         width: size.w,
         height: size.h,
         client,
-        post,
         attempt: attemptRef.current,
       })
       setImage(img)
@@ -63,7 +110,7 @@ export default function QuickImageStudio({ clients }) {
     if (!image) return
     const a = document.createElement('a')
     a.href = image
-    a.download = `${(headline || 'graphic').replace(/[^\w-]+/g, '_')}_${size.w}x${size.h}.png`
+    a.download = `${(heading || 'graphic').replace(/[^\w-]+/g, '_')}_${size.w}x${size.h}.png`
     a.click()
   }
 
@@ -81,20 +128,19 @@ export default function QuickImageStudio({ clients }) {
           🎨
         </span>
         <div className="mr-auto">
-          <h3 className="text-xl font-bold tracking-tight text-white">Make a graphic in seconds</h3>
+          <h3 className="text-xl font-bold tracking-tight text-white">Graphic studio</h3>
           <p className="text-sm text-white/70">
-            Pick a client, type a headline, hit generate. It uses their brand colors automatically.
+            Build a designed post: logo, headline, bullets, call-to-action — in your client's brand colors.
           </p>
         </div>
-        <span className="rounded-full border border-teal/30 bg-teal/10 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-teal-soft">
-          No account · runs on your device
-        </span>
+        <button type="button" onClick={fillExample} className="btn-ghost py-1.5 text-xs">
+          Fill with example
+        </button>
       </div>
 
-      <div className="relative mt-5 grid gap-5 lg:grid-cols-[1fr_auto]">
+      <div className="relative mt-5 grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="space-y-4">
-          <div>
-            <label className="label-caps mb-2 block">1 · Which client?</label>
+          <Field step="1" label="Client">
             <div className="flex flex-wrap gap-2">
               {clients.map((c) => (
                 <button
@@ -112,48 +158,113 @@ export default function QuickImageStudio({ clients }) {
                 </button>
               ))}
             </div>
-          </div>
+          </Field>
 
-          <div>
-            <label className="label-caps mb-2 block">2 · What should it say?</label>
-            <input
-              className="field"
-              value={headline}
-              onChange={(e) => setHeadline(e.target.value)}
-              placeholder="e.g. 5 signs your password was leaked"
-            />
-          </div>
-
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <label className="label-caps">3 · Style prompt (optional)</label>
-              <button
-                type="button"
-                onClick={writePrompt}
-                className="font-mono text-[10px] uppercase tracking-wider text-teal transition-colors hover:text-teal-soft"
-              >
-                ✨ Write it for me
+          <Field step="2" label="Logo" optional>
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => onLogoFile(e.target.files?.[0])}
+              />
+              <button type="button" className="btn-ghost py-2" onClick={() => fileRef.current?.click()}>
+                ⬆ Upload logo
               </button>
+              {logoData ? (
+                <span className="flex items-center gap-2 rounded-xl border border-white/10 bg-ink-800/70 py-1.5 pl-2 pr-3">
+                  <img src={logoData} alt="Logo preview" className="h-8 w-auto max-w-[90px] object-contain" />
+                  <span className="max-w-[140px] truncate text-xs text-white/70">{logoName}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogoData(null)
+                      setLogoName('')
+                      if (fileRef.current) fileRef.current.value = ''
+                    }}
+                    className="text-white/45 hover:text-red-300"
+                    title="Remove logo"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ) : (
+                <span className="text-xs text-white/50">
+                  No file? We'll use {client?.name}'s Brand Kit logo or a monogram.
+                </span>
+              )}
             </div>
+          </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field step="3" label="Eyebrow" optional>
+              <input
+                className="field"
+                value={eyebrow}
+                onChange={(e) => setEyebrow(e.target.value)}
+                placeholder="Small line above the heading"
+              />
+            </Field>
+            <Field step="4" label="Heading">
+              <input
+                className="field"
+                value={heading}
+                onChange={(e) => setHeading(e.target.value)}
+                placeholder="The big message"
+              />
+            </Field>
+          </div>
+
+          <Field step="5" label="Paragraph" optional>
             <textarea
               className="field min-h-[64px] resize-y"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Leave blank and we'll build one from the brand kit."
+              value={paragraph}
+              onChange={(e) => setParagraph(e.target.value)}
+              placeholder="One or two supporting sentences."
             />
+          </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field step="6" label="Bullet title" optional>
+              <input
+                className="field"
+                value={bulletsTitle}
+                onChange={(e) => setBulletsTitle(e.target.value)}
+                placeholder="e.g. What you get"
+              />
+            </Field>
+            <Field step="7" label="Bullets" optional>
+              <textarea
+                className="field min-h-[64px] resize-y"
+                value={bulletsText}
+                onChange={(e) => setBulletsText(e.target.value)}
+                placeholder={'One per line\nUp to six'}
+              />
+            </Field>
           </div>
 
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <label className="label-caps mb-2 block">Size</label>
-              <select className="field py-2" value={sizeId} onChange={(e) => setSizeId(e.target.value)}>
-                {IMAGE_SIZES.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label} ({s.w}×{s.h})
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field step="8" label="Call to action" optional>
+              <input
+                className="field"
+                value={cta}
+                onChange={(e) => setCta(e.target.value)}
+                placeholder="e.g. Book a free call →"
+              />
+            </Field>
+            <Field step="9" label="Size">
+              <select className="field" value={sizeId} onChange={(e) => setSizeId(e.target.value)}>
+                {IMAGE_SIZES.map((si) => (
+                  <option key={si.id} value={si.id}>
+                    {si.label} ({si.w}×{si.h})
                   </option>
                 ))}
               </select>
-            </div>
+            </Field>
+          </div>
+
+          <div className="flex items-center gap-3 pt-1">
             <button type="button" className="btn-primary" disabled={busy} onClick={() => generate(false)}>
               {busy ? (
                 <>
@@ -164,6 +275,9 @@ export default function QuickImageStudio({ clients }) {
                 '✨ Generate graphic'
               )}
             </button>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-white/45">
+              Runs on your device — nothing is uploaded
+            </span>
           </div>
 
           {error && (
@@ -177,33 +291,28 @@ export default function QuickImageStudio({ clients }) {
         </div>
 
         {/* preview panel */}
-        <div className="flex w-full flex-col items-center justify-center rounded-2xl border border-white/10 bg-ink-950/50 p-4 lg:w-[300px]">
+        <div className="flex w-full flex-col items-center justify-center self-start rounded-2xl border border-white/10 bg-ink-950/50 p-4">
           {image ? (
             <>
               <div className="overflow-hidden rounded-xl border border-white/10 shadow-card">
-                <img src={image} alt="Generated graphic" className="max-h-[300px] w-auto max-w-full" />
+                <img src={image} alt="Generated graphic" className="max-h-[380px] w-auto max-w-full" />
               </div>
               <div className="mt-3 flex w-full gap-2">
                 <button type="button" className="btn-teal flex-1" onClick={download}>
                   Download
                 </button>
-                <button
-                  type="button"
-                  className="btn-ghost flex-1"
-                  disabled={busy}
-                  onClick={() => generate(true)}
-                >
+                <button type="button" className="btn-ghost flex-1" disabled={busy} onClick={() => generate(true)}>
                   Regenerate
                 </button>
               </div>
             </>
           ) : (
-            <div className="py-10 text-center">
+            <div className="py-16 text-center">
               <p className="text-3xl">🖼️</p>
               <p className="mt-2 text-sm text-white/60">
-                Your graphic shows up here.
+                Your design appears here.
                 <br />
-                Fill in a headline and hit generate.
+                Fill in the fields and hit generate.
               </p>
             </div>
           )}
