@@ -58,7 +58,7 @@ jobs:
           for i in $(seq 1 24); do
             completed=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/${{ github.repository }}/actions/runs?head_sha=${{ github.sha }}&per_page=100" \
-              | jq '[.workflow_runs[] | select(.name == "pages-build-deployment") | select(.status == "completed")] | length')
+              | jq '[.workflow_runs[] | select(.name == "pages build and deployment" or .name == "pages-build-deployment") | select(.status == "completed")] | length')
             if [ "${completed:-0}" -ge 1 ] 2>/dev/null; then
               echo "Branch-based Pages build completed — deploying the built site after it."
               exit 0

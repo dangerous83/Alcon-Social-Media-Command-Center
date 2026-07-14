@@ -27,7 +27,10 @@ export default function Pipeline({ posts, onEdit, onPatch, onDuplicate }) {
               setOverCol(status)
             }}
             onDragLeave={() => setOverCol((c) => (c === status ? null : c))}
-            onDrop={() => drop(status)}
+            onDrop={(e) => {
+              e.preventDefault()
+              drop(status)
+            }}
             className={`panel flex min-h-[320px] flex-col border-dashed p-3 transition-colors ${
               overCol === status && dragId ? 'drag-over' : ''
             }`}
@@ -50,7 +53,12 @@ export default function Pipeline({ posts, onEdit, onPatch, onDuplicate }) {
                   <article
                     key={post.id}
                     draggable
-                    onDragStart={() => setDragId(post.id)}
+                    onDragStart={(e) => {
+                      // Firefox cancels drags that set no data
+                      e.dataTransfer.setData('text/plain', post.id)
+                      e.dataTransfer.effectAllowed = 'move'
+                      setDragId(post.id)
+                    }}
                     onDragEnd={() => {
                       setDragId(null)
                       setOverCol(null)
