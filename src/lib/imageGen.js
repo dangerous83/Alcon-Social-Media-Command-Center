@@ -365,6 +365,268 @@ export async function composeBrandImage({ prompt, width, height, client, post, a
   return canvas.toDataURL('image/png')
 }
 
+// ---------------------------------------------------------------------------
+// Structured composer: a professional top-to-bottom content layout —
+// logo → eyebrow → heading → paragraph → bullet title → bullets → CTA —
+// rendered over a subtle brand-colored background. Used by the dashboard
+// Quick Image Studio.
+// ---------------------------------------------------------------------------
+
+const mixWithWhite = (hex, amount) => {
+  const { r, g, b } = hexToRgb(hex)
+  const mix = (c) => Math.round(c + (255 - c) * amount)
+  return `rgb(${mix(r)},${mix(g)},${mix(b)})`
+}
+
+// Brand color made bright enough to read on the dark background.
+const readableAccent = (hex) => {
+  const lum = luminance(hex)
+  if (lum >= 0.55) return rgba(hex, 1)
+  return mixWithWhite(hex, Math.min(0.7, (0.55 - lum) * 1.6 + 0.15))
+}
+
+export async function composeStructuredImage({ content, width, height, client, attempt = 0 }) {
+  await ensureFonts()
+
+  const brand = client.brand || {}
+  const palette = (brand.colors || []).filter(Boolean)
+  const c1 = palette[0] || client.color || '#FF6B35'
+  const c2 = palette[1] || '#2DD4BF'
+
+  const eyebrow = (content.eyebrow || '').trim()
+  const heading = (content.heading || '').trim() || 'Your headline here'
+  const paragraph = (content.paragraph || '').trim()
+  const bulletsTitle = (content.bulletsTitle || '').trim()
+  const bullets = (content.bullets || []).map((b) => b.trim()).filter(Boolean).slice(0, 6)
+  const cta = (content.cta || '').trim()
+
+  const rand = mulberry32(hashString(`${heading}::${attempt}`))
+  const logo =
+    (await loadLogo(content.logoData)) || (await loadLogo(brand.logoUrl)) || null
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+
+  const u = Math.min(width, height) / 1080
+  const pad = Math.round(Math.min(width, height) * 0.085)
+  const isWide = width / height > 1.5
+  // On wide banners keep text to ~62% so the composition breathes.
+  const contentW = isWide ? Math.round(width * 0.62) : width - pad * 2
+
+  // ---- background: restrained brand wash ----
+  const base = ctx.createLinearGradient(0, 0, width * 0.6, height)
+  base.addColorStop(0, '#0A0D16')
+  base.addColorStop(0.6, '#0D1220')
+  base.addColorStop(1, '#0f1728')
+  ctx.fillStyle = base
+  ctx.fillRect(0, 0, width, height)
+  const reach = Math.max(width, height)
+  drawGlow(ctx, width * (0.82 + rand() * 0.12), height * (0.04 + rand() * 0.12), reach * 0.62, c1, 0.24)
+  drawGlow(ctx, width * (0.02 + rand() * 0.1), height * (0.88 + rand() * 0.08), reach * 0.55, c2, 0.18)
+  // thin arc accent in a corner, behind everything
+  ctx.save()
+  ctx.lineWidth = Math.max(2, width / 320)
+  const arcGrad = ctx.createLinearGradient(0, 0, width, height)
+  arcGrad.addColorStop(0, rgba(c1, 0.4))
+  arcGrad.addColorStop(1, rgba(c2, 0.18))
+  ctx.strokeStyle = arcGrad
+  ctx.beginPath()
+  ctx.arc(width * 1.02, height * -0.02, reach * (0.28 + rand() * 0.1), Math.PI * 0.42, Math.PI * 1.05)
+  ctx.stroke()
+  ctx.restore()
+  drawDotGrid(ctx, width, height, 'rgba(255,255,255,0.04)', rand)
+  drawGrain(ctx, width, height, rand, 0.04)
+  const vig = ctx.createLinearGradient(0, height * 0.4, 0, height)
+  vig.addColorStop(0, 'rgba(7,9,15,0)')
+  vig.addColorStop(1, 'rgba(7,9,15,0.6)')
+  ctx.fillStyle = vig
+  ctx.fillRect(0, 0, width, height)
+
+  const accent = readableAccent(c1)
+  const accent2 = readableAccent(c2)
+
+  // ---- fit pass: shrink type scale until the stack fits above the CTA row ----
+  const ctaH = (s) => (cta ? Math.round(86 * u * s) : 0)
+  const measure = (s) => {
+    let total = 0
+    // logo block, or the monogram fallback — both take vertical space
+    total += logo ? Math.min(110 * u * s, height * 0.12) + 46 * u * s : 84 * u * s + 42 * u * s
+    if (eyebrow) total += 30 * u * s + 30 * u * s
+    ctx.font = `700 ${Math.round(82 * u * s)}px "Space Grotesk"`
+    const headLines = wrapText(ctx, heading, contentW).slice(0, 4)
+    total += headLines.length * 82 * u * s * 1.1 + 30 * u * s
+    if (paragraph) {
+      ctx.font = `500 ${Math.round(34 * u * s)}px "Space Grotesk"`
+      const pLines = wrapText(ctx, paragraph, contentW).slice(0, 5)
+      total += pLines.length * 34 * u * s * 1.5 + 36 * u * s
+    }
+    if (bulletsTitle) total += 36 * u * s + 24 * u * s
+    if (bullets.length) {
+      ctx.font = `500 ${Math.round(33 * u * s)}px "Space Grotesk"`
+      for (const b of bullets) {
+        const lines = wrapText(ctx, b, contentW - 52 * u * s).slice(0, 2)
+        total += lines.length * 33 * u * s * 1.42 + 18 * u * s
+      }
+      total += 20 * u * s
+    }
+    return total
+  }
+  let scale = 1
+  const available = () => height - pad * 2 - (cta ? ctaH(scale) + 40 * u * scale : 28 * u)
+  while (measure(scale) > available() && scale > 0.55) scale *= 0.94
+  const s = scale
+
+  // ---- draw the stack, vertically centered in the space above the CTA ----
+  const leftover = Math.max(0, available() - measure(s))
+  let y = pad + leftover / 2
+
+  if (logo) {
+    const maxH = Math.min(110 * u * s, height * 0.12)
+    const ratio = logo.width / logo.height || 1
+    let lh = maxH
+    let lw = lh * ratio
+    if (lw > width * 0.34) {
+      lw = width * 0.34
+      lh = lw / ratio
+    }
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,0.35)'
+    ctx.shadowBlur = 14 * u * s
+    ctx.drawImage(logo, pad, y, lw, lh)
+    ctx.restore()
+    y += maxH + 46 * u * s
+  } else {
+    drawMonogram(ctx, pad, y, 84 * u * s, (client.name || 'A').charAt(0).toUpperCase(), c1)
+    y += 84 * u * s + 42 * u * s
+  }
+
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+
+  if (eyebrow) {
+    const size = Math.round(28 * u * s)
+    ctx.font = `600 ${size}px "JetBrains Mono"`
+    ctx.fillStyle = accent
+    ctx.save()
+    ctx.letterSpacing = `${Math.round(size * 0.28)}px`
+    ctx.fillText(eyebrow.toUpperCase(), pad, y + size)
+    ctx.restore()
+    y += size + 30 * u * s
+  }
+
+  {
+    const size = Math.round(82 * u * s)
+    ctx.font = `700 ${size}px "Space Grotesk"`
+    const lines = wrapText(ctx, heading, contentW).slice(0, 4)
+    ctx.fillStyle = 'rgba(255,255,255,0.97)'
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,0.45)'
+    ctx.shadowBlur = size * 0.14
+    for (const line of lines) {
+      y += size * 1.1
+      ctx.fillText(line, pad, y)
+    }
+    ctx.restore()
+    y += 30 * u * s
+  }
+
+  if (paragraph) {
+    const size = Math.round(34 * u * s)
+    ctx.font = `500 ${size}px "Space Grotesk"`
+    let lines = wrapText(ctx, paragraph, contentW)
+    if (lines.length > 5) {
+      lines = lines.slice(0, 5)
+      lines[4] = lines[4].replace(/\s+\S*$/, '') + '…'
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.87)'
+    for (const line of lines) {
+      y += size * 1.5
+      ctx.fillText(line, pad, y)
+    }
+    y += 36 * u * s
+  }
+
+  if (bulletsTitle) {
+    const size = Math.round(36 * u * s)
+    ctx.font = `600 ${size}px "Space Grotesk"`
+    ctx.fillStyle = 'rgba(255,255,255,0.95)'
+    y += size
+    ctx.fillText(bulletsTitle, pad, y)
+    // small accent rule under the title
+    ctx.fillStyle = rgba(c1, 0.9)
+    ctx.fillRect(pad, y + 12 * u * s, 64 * u * s, Math.max(3, 5 * u * s))
+    y += 24 * u * s + 12 * u * s
+  }
+
+  if (bullets.length) {
+    const size = Math.round(33 * u * s)
+    const indent = 52 * u * s
+    ctx.font = `500 ${size}px "Space Grotesk"`
+    for (const b of bullets) {
+      const lines = wrapText(ctx, b, contentW - indent).slice(0, 2)
+      // marker vertically centered on the first line of text
+      ctx.beginPath()
+      ctx.arc(pad + 11 * u * s, y + size * 1.42 - size * 0.34, 9 * u * s, 0, Math.PI * 2)
+      ctx.fillStyle = accent2
+      ctx.fill()
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'
+      for (const line of lines) {
+        y += size * 1.42
+        ctx.fillText(line, pad + indent, y)
+      }
+      y += 18 * u * s
+    }
+    y += 20 * u * s
+  }
+
+  // ---- CTA pill + brand footer, anchored at the bottom ----
+  if (cta) {
+    const pillH = ctaH(s)
+    const textSize = Math.round(32 * u * s)
+    ctx.font = `600 ${textSize}px "Space Grotesk"`
+    const textW = ctx.measureText(cta).width
+    const pillW = Math.min(textW + 72 * u * s, width - pad * 2)
+    const pillY = height - pad - pillH
+    ctx.save()
+    ctx.shadowColor = rgba(c1, 0.45)
+    ctx.shadowBlur = 28 * u * s
+    ctx.beginPath()
+    ctx.roundRect(pad, pillY, pillW, pillH, pillH / 2)
+    ctx.fillStyle = c1
+    ctx.fill()
+    ctx.restore()
+    ctx.fillStyle = luminance(c1) > 0.42 ? '#0A0D16' : 'rgba(255,255,255,0.97)'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(cta, pad + 36 * u * s, pillY + pillH / 2 + textSize * 0.06)
+    ctx.textBaseline = 'alphabetic'
+  }
+
+  // client name + palette chips bottom-right
+  const footSize = Math.round(22 * u * s)
+  ctx.font = `500 ${footSize}px "JetBrains Mono"`
+  const nameText = client.name.toUpperCase()
+  const chips = (palette.length ? palette.slice(0, 3) : [c1, c2])
+  const chipR = footSize * 0.34
+  const chipsW = chips.length * chipR * 2.6
+  const nameW = ctx.measureText(nameText).width
+  const footY = height - pad - footSize * 0.4
+  ctx.fillStyle = 'rgba(255,255,255,0.6)'
+  ctx.save()
+  ctx.letterSpacing = `${Math.round(footSize * 0.18)}px`
+  ctx.fillText(nameText, width - pad - nameW - chipsW - 18 * u * s, footY)
+  ctx.restore()
+  chips.forEach((hex, i) => {
+    ctx.beginPath()
+    ctx.arc(width - pad - chipsW + i * chipR * 2.6 + chipR, footY - footSize * 0.3, chipR, 0, Math.PI * 2)
+    ctx.fillStyle = hex
+    ctx.fill()
+  })
+
+  return canvas.toDataURL('image/png')
+}
+
 // Builds a descriptive prompt from the caption + brand kit for the prompt box.
 export function buildPromptFromBrand({ post, client, sizeLabel }) {
   const brand = client.brand || {}
