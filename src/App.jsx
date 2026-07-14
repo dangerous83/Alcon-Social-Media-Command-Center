@@ -9,6 +9,7 @@ import * as db from './lib/db.js'
 
 export default function App() {
   const [ready, setReady] = useState(false)
+  const [initError, setInitError] = useState(null)
   const [clients, setClients] = useState([])
   const [posts, setPosts] = useState([])
   const [activeClientId, setActiveClientId] = useState(null)
@@ -26,6 +27,10 @@ export default function App() {
     db.seedIfEmpty()
       .then(refresh)
       .then(() => setReady(true))
+      .catch((err) => {
+        console.error('Could not open local storage', err)
+        setInitError(err)
+      })
   }, [refresh])
 
   const activeClient = useMemo(
@@ -78,6 +83,25 @@ export default function App() {
     if (activeClientId === clientId) setActiveClientId(null)
     setClientDraft(null)
     await refresh()
+  }
+
+  if (initError) {
+    return (
+      <div className="flex h-screen items-center justify-center p-6">
+        <div className="panel max-w-md p-8 text-center">
+          <p className="text-3xl">🔒</p>
+          <h1 className="mt-3 text-xl font-bold text-white">Can't open local storage</h1>
+          <p className="mt-2 text-sm leading-relaxed text-white/75">
+            This app saves everything in your browser (IndexedDB), and your browser is blocking
+            it — this usually happens in private/incognito windows or with strict privacy
+            settings. Try a regular window, or allow site data for this page.
+          </p>
+          <button className="btn-primary mt-5" onClick={() => window.location.reload()}>
+            Try again
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (!ready) {
