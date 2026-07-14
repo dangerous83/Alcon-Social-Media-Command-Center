@@ -29,6 +29,7 @@ export const emptyBrand = () => ({
   logoUrl: '',
   tone: '',
   rules: '',
+  photoStyle: '',
 })
 
 const SEED_CLIENTS = [

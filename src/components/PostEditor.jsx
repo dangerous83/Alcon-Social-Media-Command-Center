@@ -3,7 +3,7 @@ import Modal from './Modal.jsx'
 import ImageGenerator from './ImageGenerator.jsx'
 import { FORMATS, PLATFORMS, STATUSES } from '../lib/constants.js'
 
-export default function PostEditor({ draft, client, onSave, onDelete, onDuplicate, onClose }) {
+export default function PostEditor({ draft, client, onSave, onDelete, onDuplicate, onClose, onOpenAISettings }) {
   const isNew = !draft.id
   const [post, setPost] = useState({ ...draft })
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -92,8 +92,9 @@ export default function PostEditor({ draft, client, onSave, onDelete, onDuplicat
           <ImageGenerator
             post={post}
             client={client}
-            onImage={({ image, imagePrompt, imageSize }) =>
-              setPost((p) => ({ ...p, image, imagePrompt, imageSize }))
+            onOpenAISettings={onOpenAISettings}
+            onImage={({ image, imagePrompt, imageSize, imageMode, imageOverlay }) =>
+              setPost((p) => ({ ...p, image, imagePrompt, imageSize, imageMode, imageOverlay }))
             }
           />
         )}

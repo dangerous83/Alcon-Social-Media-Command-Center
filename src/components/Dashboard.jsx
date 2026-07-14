@@ -1,6 +1,7 @@
 import { isThisMonth, isThisWeek, prettyDate, todayKey } from '../lib/dates.js'
 import { platformById } from '../lib/constants.js'
 import QuickImageStudio from './QuickImageStudio.jsx'
+import VisualAutopilot from './VisualAutopilot.jsx'
 
 function StatCard({ label, value, tone = 'text-white' }) {
   return (
@@ -11,7 +12,7 @@ function StatCard({ label, value, tone = 'text-white' }) {
   )
 }
 
-export default function Dashboard({ clients, posts, onSelectClient, onOpenPost }) {
+export default function Dashboard({ clients, posts, onSelectClient, onOpenPost, onPatchPost }) {
   const thisMonth = posts.filter((p) => isThisMonth(p.date))
   const forReview = posts.filter((p) => p.status === 'For Review')
   const dueThisWeek = posts.filter((p) => isThisWeek(p.date) && p.status !== 'Posted')
@@ -35,6 +36,10 @@ export default function Dashboard({ clients, posts, onSelectClient, onOpenPost }
 
       <div className="mb-6">
         <QuickImageStudio clients={clients} />
+      </div>
+
+      <div className="mb-6">
+        <VisualAutopilot clients={clients} posts={posts} onPatchPost={onPatchPost} />
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">

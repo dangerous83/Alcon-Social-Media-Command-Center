@@ -5,6 +5,8 @@ import Dashboard from './components/Dashboard.jsx'
 import Workspace from './components/Workspace.jsx'
 import PostEditor from './components/PostEditor.jsx'
 import ClientModal from './components/ClientModal.jsx'
+import AISettings from './components/AISettings.jsx'
+import { getAISettings } from './lib/aiImage.js'
 import * as db from './lib/db.js'
 
 export default function App() {
@@ -16,6 +18,8 @@ export default function App() {
   const [tab, setTab] = useState('calendar')
   const [editorDraft, setEditorDraft] = useState(null) // post being edited/created
   const [clientDraft, setClientDraft] = useState(null) // client being edited/created
+  const [aiSettings, setAISettings] = useState(getAISettings)
+  const [aiSettingsOpen, setAISettingsOpen] = useState(false)
 
   const refresh = useCallback(async () => {
     const [c, p] = await Promise.all([db.listClients(), db.listAllPosts()])
@@ -123,7 +127,13 @@ export default function App() {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar posts={posts} clients={clients} onOpenPost={openPost} activeClient={activeClient} />
+        <TopBar
+          posts={posts}
+          clients={clients}
+          onOpenPost={openPost}
+          activeClient={activeClient}
+          onOpenAISettings={() => setAISettingsOpen(true)}
+        />
 
         <main className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 pt-6 lg:px-10">
           {activeClient ? (
@@ -153,7 +163,13 @@ export default function App() {
               onDuplicatePost={duplicatePost}
             />
           ) : (
-            <Dashboard clients={clients} posts={posts} onSelectClient={selectClient} onOpenPost={openPost} />
+            <Dashboard
+              clients={clients}
+              posts={posts}
+              onSelectClient={selectClient}
+              onOpenPost={openPost}
+              onPatchPost={patchPost}
+            />
           )}
         </main>
       </div>
@@ -169,6 +185,15 @@ export default function App() {
             setEditorDraft(copy)
           }}
           onClose={() => setEditorDraft(null)}
+          onOpenAISettings={() => setAISettingsOpen(true)}
+        />
+      )}
+
+      {aiSettingsOpen && (
+        <AISettings
+          settings={aiSettings}
+          onChange={setAISettings}
+          onClose={() => setAISettingsOpen(false)}
         />
       )}
 

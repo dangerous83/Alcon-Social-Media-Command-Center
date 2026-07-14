@@ -175,7 +175,18 @@ function drawMonogram(ctx, x, y, size, initial, brandHex) {
   ctx.restore()
 }
 
-export async function composeBrandImage({ prompt, width, height, client, post, attempt = 0 }) {
+// Cover-fit a photo into the frame (fills, crops overflow).
+function coverDrawImage(ctx, img, w, h) {
+  const scale = Math.max(w / img.width, h / img.height)
+  const dw = img.width * scale
+  const dh = img.height * scale
+  ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh)
+}
+
+// `photo` (optional): a loaded <img> with a real AI-generated photograph used
+// as the background instead of the local gradient art. The brand overlay
+// (kicker, logo, headline, footer) is identical in both modes.
+export async function composeBrandImage({ prompt, width, height, client, post, attempt = 0, photo = null }) {
   await ensureFonts()
 
   const brand = client.brand || {}
@@ -196,69 +207,90 @@ export async function composeBrandImage({ prompt, width, height, client, post, a
   const isTall = height / width > 1.4
   const variant = Math.floor(rand() * 3) // 0 beam, 1 orbit, 2 arc
 
-  // -- base: deep navy with a directional brand-tinted gradient
-  const angle = rand() * Math.PI * 2
   const cx = width / 2
   const cy = height / 2
   const reach = Math.max(width, height)
-  const gx = Math.cos(angle) * reach
-  const gy = Math.sin(angle) * reach
-  const base = ctx.createLinearGradient(cx - gx, cy - gy, cx + gx, cy + gy)
-  base.addColorStop(0, '#0A0D16')
-  base.addColorStop(0.55, '#0D1220')
-  base.addColorStop(1, '#101a2e')
-  ctx.fillStyle = base
-  ctx.fillRect(0, 0, width, height)
 
-  // -- layered brand glows
-  drawGlow(ctx, width * (0.75 + rand() * 0.2), height * (0.05 + rand() * 0.2), reach * 0.75, c1, 0.32)
-  drawGlow(ctx, width * (0.02 + rand() * 0.2), height * (0.8 + rand() * 0.15), reach * 0.7, c2, 0.26)
-  if (palette.length > 2) drawGlow(ctx, width * 0.5, height * 0.5, reach * 0.5, c3, 0.1)
-
-  // -- geometry per variant
-  if (variant === 0) {
-    // diagonal light beam
-    ctx.save()
-    ctx.translate(cx, cy)
-    ctx.rotate(-Math.PI / 5 + rand() * 0.35)
-    const beam = ctx.createLinearGradient(0, -reach, 0, reach)
-    beam.addColorStop(0, rgba(c1, 0))
-    beam.addColorStop(0.5, rgba(c1, 0.14))
-    beam.addColorStop(1, rgba(c2, 0))
-    ctx.fillStyle = beam
-    ctx.fillRect(-reach, -reach * 0.18, reach * 2, reach * 0.36)
-    ctx.restore()
-  } else if (variant === 1) {
-    // orbit rings top-right
-    drawRings(ctx, width * (0.82 + rand() * 0.12), height * (0.12 + rand() * 0.1), Math.min(width, height) * 0.16, c2, 3)
-    ctx.beginPath()
-    ctx.arc(width * 0.85, height * 0.14, Math.min(width, height) * 0.035, 0, Math.PI * 2)
-    ctx.fillStyle = rgba(c1, 0.85)
-    ctx.fill()
+  if (photo) {
+    // -- real photo background + scrims that keep the overlay text readable
+    coverDrawImage(ctx, photo, width, height)
+    // top scrim under kicker + logo
+    const top = ctx.createLinearGradient(0, 0, 0, height * 0.32)
+    top.addColorStop(0, 'rgba(7,9,15,0.62)')
+    top.addColorStop(1, 'rgba(7,9,15,0)')
+    ctx.fillStyle = top
+    ctx.fillRect(0, 0, width, height * 0.32)
+    // bottom scrim under headline + footer
+    const bottom = ctx.createLinearGradient(0, height * 0.4, 0, height)
+    bottom.addColorStop(0, 'rgba(7,9,15,0)')
+    bottom.addColorStop(0.55, 'rgba(7,9,15,0.45)')
+    bottom.addColorStop(1, 'rgba(7,9,15,0.85)')
+    ctx.fillStyle = bottom
+    ctx.fillRect(0, 0, width, height)
+    // whisper of brand color so the photo still feels on-brand
+    drawGlow(ctx, width * 0.9, height * 0.06, reach * 0.5, c1, 0.1)
   } else {
-    // sweeping arc
-    ctx.save()
-    ctx.lineWidth = Math.max(3, width / 220)
-    const arcGrad = ctx.createLinearGradient(0, 0, width, height)
-    arcGrad.addColorStop(0, rgba(c1, 0.75))
-    arcGrad.addColorStop(1, rgba(c2, 0.35))
-    ctx.strokeStyle = arcGrad
-    ctx.beginPath()
-    ctx.arc(width * 1.05, height * (isTall ? 0.32 : 0.9), reach * 0.55, Math.PI * 0.6, Math.PI * 1.5)
-    ctx.stroke()
-    ctx.restore()
+    // -- base: deep navy with a directional brand-tinted gradient
+    const angle = rand() * Math.PI * 2
+    const gx = Math.cos(angle) * reach
+    const gy = Math.sin(angle) * reach
+    const base = ctx.createLinearGradient(cx - gx, cy - gy, cx + gx, cy + gy)
+    base.addColorStop(0, '#0A0D16')
+    base.addColorStop(0.55, '#0D1220')
+    base.addColorStop(1, '#101a2e')
+    ctx.fillStyle = base
+    ctx.fillRect(0, 0, width, height)
+
+    // -- layered brand glows
+    drawGlow(ctx, width * (0.75 + rand() * 0.2), height * (0.05 + rand() * 0.2), reach * 0.75, c1, 0.32)
+    drawGlow(ctx, width * (0.02 + rand() * 0.2), height * (0.8 + rand() * 0.15), reach * 0.7, c2, 0.26)
+    if (palette.length > 2) drawGlow(ctx, width * 0.5, height * 0.5, reach * 0.5, c3, 0.1)
+
+    // -- geometry per variant
+    if (variant === 0) {
+      // diagonal light beam
+      ctx.save()
+      ctx.translate(cx, cy)
+      ctx.rotate(-Math.PI / 5 + rand() * 0.35)
+      const beam = ctx.createLinearGradient(0, -reach, 0, reach)
+      beam.addColorStop(0, rgba(c1, 0))
+      beam.addColorStop(0.5, rgba(c1, 0.14))
+      beam.addColorStop(1, rgba(c2, 0))
+      ctx.fillStyle = beam
+      ctx.fillRect(-reach, -reach * 0.18, reach * 2, reach * 0.36)
+      ctx.restore()
+    } else if (variant === 1) {
+      // orbit rings top-right
+      drawRings(ctx, width * (0.82 + rand() * 0.12), height * (0.12 + rand() * 0.1), Math.min(width, height) * 0.16, c2, 3)
+      ctx.beginPath()
+      ctx.arc(width * 0.85, height * 0.14, Math.min(width, height) * 0.035, 0, Math.PI * 2)
+      ctx.fillStyle = rgba(c1, 0.85)
+      ctx.fill()
+    } else {
+      // sweeping arc
+      ctx.save()
+      ctx.lineWidth = Math.max(3, width / 220)
+      const arcGrad = ctx.createLinearGradient(0, 0, width, height)
+      arcGrad.addColorStop(0, rgba(c1, 0.75))
+      arcGrad.addColorStop(1, rgba(c2, 0.35))
+      ctx.strokeStyle = arcGrad
+      ctx.beginPath()
+      ctx.arc(width * 1.05, height * (isTall ? 0.32 : 0.9), reach * 0.55, Math.PI * 0.6, Math.PI * 1.5)
+      ctx.stroke()
+      ctx.restore()
+    }
+
+    // -- texture
+    drawDotGrid(ctx, width, height, 'rgba(255,255,255,0.05)', rand)
+    drawGrain(ctx, width, height, rand, 0.05)
+
+    // -- vignette so type always sits on dark
+    const vig = ctx.createLinearGradient(0, height * 0.35, 0, height)
+    vig.addColorStop(0, 'rgba(7,9,15,0)')
+    vig.addColorStop(1, 'rgba(7,9,15,0.72)')
+    ctx.fillStyle = vig
+    ctx.fillRect(0, 0, width, height)
   }
-
-  // -- texture
-  drawDotGrid(ctx, width, height, 'rgba(255,255,255,0.05)', rand)
-  drawGrain(ctx, width, height, rand, 0.05)
-
-  // -- vignette so type always sits on dark
-  const vig = ctx.createLinearGradient(0, height * 0.35, 0, height)
-  vig.addColorStop(0, 'rgba(7,9,15,0)')
-  vig.addColorStop(1, 'rgba(7,9,15,0.72)')
-  ctx.fillStyle = vig
-  ctx.fillRect(0, 0, width, height)
 
   // -- kicker (client + platform), top-left, mono small caps
   const kickerSize = Math.round(Math.min(width, height) * 0.026)
@@ -362,7 +394,9 @@ export async function composeBrandImage({ prompt, width, height, client, post, a
     }
   })
 
-  return canvas.toDataURL('image/png')
+  // Photo composites are stored as JPEG — a photographic PNG data URL would be
+  // several times larger in IndexedDB for no visible gain.
+  return photo ? canvas.toDataURL('image/jpeg', 0.92) : canvas.toDataURL('image/png')
 }
 
 // ---------------------------------------------------------------------------
@@ -386,6 +420,7 @@ const readableAccent = (hex) => {
 }
 
 export const BACKGROUND_STYLES = [
+  { id: 'photo', label: '📷 AI photo' },
   { id: 'aurora', label: 'Aurora' },
   { id: 'mesh', label: 'Mesh' },
   { id: 'grid', label: 'Tech grid' },
@@ -546,26 +581,32 @@ export async function composeStructuredImage({ content, width, height, client, a
   const contentW = isWide ? Math.round(width * 0.62) : width - pad * 2
 
   // ---- background ----
-  drawBackground(ctx, {
-    style: content.background || 'aurora',
-    width,
-    height,
-    c1,
-    c2,
-    palette,
-    rand,
-  })
+  const isPhoto = Boolean(content.photo)
+  if (isPhoto) {
+    // real AI photograph as the canvas — scrims below keep the copy readable
+    coverDrawImage(ctx, content.photo, width, height)
+  } else {
+    drawBackground(ctx, {
+      style: content.background || 'aurora',
+      width,
+      height,
+      c1,
+      c2,
+      palette,
+      rand,
+    })
+  }
   // legibility scrim: darken the left/bottom where text sits, so any background
-  // style keeps strong contrast under the copy
+  // style keeps strong contrast under the copy (stronger over a photo)
   const scrim = ctx.createLinearGradient(0, 0, width, 0)
-  scrim.addColorStop(0, 'rgba(7,9,15,0.55)')
-  scrim.addColorStop(0.55, 'rgba(7,9,15,0.15)')
-  scrim.addColorStop(1, 'rgba(7,9,15,0)')
+  scrim.addColorStop(0, `rgba(7,9,15,${isPhoto ? 0.78 : 0.55})`)
+  scrim.addColorStop(0.55, `rgba(7,9,15,${isPhoto ? 0.42 : 0.15})`)
+  scrim.addColorStop(1, `rgba(7,9,15,${isPhoto ? 0.12 : 0})`)
   ctx.fillStyle = scrim
   ctx.fillRect(0, 0, width, height)
   const vig = ctx.createLinearGradient(0, height * 0.45, 0, height)
   vig.addColorStop(0, 'rgba(7,9,15,0)')
-  vig.addColorStop(1, 'rgba(7,9,15,0.55)')
+  vig.addColorStop(1, `rgba(7,9,15,${isPhoto ? 0.7 : 0.55})`)
   ctx.fillStyle = vig
   ctx.fillRect(0, 0, width, height)
 
@@ -749,7 +790,7 @@ export async function composeStructuredImage({ content, width, height, client, a
     ctx.fill()
   })
 
-  return canvas.toDataURL('image/png')
+  return isPhoto ? canvas.toDataURL('image/jpeg', 0.92) : canvas.toDataURL('image/png')
 }
 
 // Builds a descriptive prompt from the caption + brand kit for the prompt box.

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { platformById } from '../lib/constants.js'
 import { prettyDate } from '../lib/dates.js'
 
-export default function TopBar({ posts, clients, onOpenPost, activeClient }) {
+export default function TopBar({ posts, clients, onOpenPost, activeClient, onOpenAISettings }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const boxRef = useRef(null)
@@ -89,6 +89,15 @@ export default function TopBar({ posts, clients, onOpenPost, activeClient }) {
           </div>
         )}
       </div>
+
+      <button
+        type="button"
+        onClick={onOpenAISettings}
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/10 bg-white/[0.04] text-white/70 transition-all hover:border-white/20 hover:bg-white/[0.09] hover:text-white"
+        title="AI image engine settings"
+      >
+        ⚙
+      </button>
     </header>
   )
 }

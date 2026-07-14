@@ -1,6 +1,13 @@
 import { useMemo, useRef, useState } from 'react'
 import { IMAGE_SIZES } from '../lib/constants.js'
 import { BACKGROUND_STYLES, composeStructuredImage } from '../lib/imageGen.js'
+import {
+  buildPhotoPrompt,
+  generateAIPhoto,
+  inferScene,
+  loadImageElement,
+  seedFor,
+} from '../lib/aiImage.js'
 
 // Professional graphic builder on the dashboard. Structured content, top to
 // bottom: logo → eyebrow → heading → paragraph → bullet title → bullets → CTA.
@@ -40,9 +47,11 @@ export default function QuickImageStudio({ clients }) {
   const [bulletsTitle, setBulletsTitle] = useState('')
   const [bulletsText, setBulletsText] = useState('')
   const [cta, setCta] = useState('')
-  const [background, setBackground] = useState('aurora')
+  const [background, setBackground] = useState('photo')
+  const [scene, setScene] = useState('')
   const [sizeId, setSizeId] = useState('ig-square')
   const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState('')
   const [error, setError] = useState(null)
   const [image, setImage] = useState(null)
   const attemptRef = useRef(0)
@@ -83,6 +92,24 @@ export default function QuickImageStudio({ clients }) {
     setBusy(true)
     setError(null)
     try {
+      let photo = null
+      if (background === 'photo') {
+        const prompt = buildPhotoPrompt({
+          post: { title: heading, caption: paragraph },
+          client,
+          scene,
+        })
+        setStatus('Creating your photo — usually 10–30 seconds…')
+        const { dataUrl } = await generateAIPhoto({
+          prompt,
+          width: size.w,
+          height: size.h,
+          seed: seedFor(prompt, attemptRef.current),
+          onStatus: setStatus,
+        })
+        setStatus('Composing your design…')
+        photo = await loadImageElement(dataUrl)
+      }
       const img = await composeStructuredImage({
         content: {
           logoData,
@@ -93,6 +120,7 @@ export default function QuickImageStudio({ clients }) {
           bullets: bulletsText.split('\n'),
           cta,
           background,
+          photo,
         },
         width: size.w,
         height: size.h,
@@ -102,9 +130,14 @@ export default function QuickImageStudio({ clients }) {
       setImage(img)
     } catch (err) {
       console.error('Image generation failed', err)
-      setError('Hmm, that didn’t work — the fonts may still be loading. Give it another tap.')
+      setError(
+        background === 'photo'
+          ? err.message || 'Photo generation failed — check your connection, or pick a non-photo background.'
+          : 'Hmm, that didn’t work — the fonts may still be loading. Give it another tap.',
+      )
     } finally {
       setBusy(false)
+      setStatus('')
     }
   }
 
@@ -112,7 +145,8 @@ export default function QuickImageStudio({ clients }) {
     if (!image) return
     const a = document.createElement('a')
     a.href = image
-    a.download = `${(heading || 'graphic').replace(/[^\w-]+/g, '_')}_${size.w}x${size.h}.png`
+    const ext = image.startsWith('data:image/jpeg') ? 'jpg' : 'png'
+    a.download = `${(heading || 'graphic').replace(/[^\w-]+/g, '_')}_${size.w}x${size.h}.${ext}`
     a.click()
   }
 
@@ -285,6 +319,30 @@ export default function QuickImageStudio({ clients }) {
             </div>
           </Field>
 
+          {background === 'photo' && (
+            <Field
+              step="11"
+              label="Photo scene"
+              optional
+              action={
+                <button
+                  type="button"
+                  className="font-mono text-[10px] uppercase tracking-wider text-teal/80 hover:text-teal"
+                  onClick={() => setScene(inferScene(`${heading} ${paragraph}`))}
+                >
+                  ✨ Suggest from heading
+                </button>
+              }
+            >
+              <input
+                className="field"
+                value={scene}
+                onChange={(e) => setScene(e.target.value)}
+                placeholder="Leave empty to auto-match your heading — or describe the scene, e.g. a modern security operations center"
+              />
+            </Field>
+          )}
+
           <div className="flex items-center gap-3 pt-1">
             <button type="button" className="btn-primary" disabled={busy} onClick={() => generate(false)}>
               {busy ? (
@@ -292,12 +350,18 @@ export default function QuickImageStudio({ clients }) {
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink-950 border-t-transparent" />
                   Creating…
                 </>
+              ) : background === 'photo' ? (
+                '📷 Generate design'
               ) : (
                 '✨ Generate graphic'
               )}
             </button>
             <span className="font-mono text-[10px] uppercase tracking-wider text-white/45">
-              Runs on your device — nothing is uploaded
+              {background === 'photo'
+                ? busy && status
+                  ? status
+                  : 'Real AI photo + your text, composed on your device'
+                : 'Runs on your device — nothing is uploaded'}
             </span>
           </div>
 
