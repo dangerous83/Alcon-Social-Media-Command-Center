@@ -11,6 +11,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  actions: read
 
 # Allow one concurrent deployment; newer runs cancel in-progress ones.
 concurrency:
@@ -40,5 +41,25 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # While the repo's Pages source is "Deploy from a branch", GitHub also runs
+      # its own pages-build-deployment on every push, publishing the RAW source
+      # (which a browser can't run) and racing this workflow. Wait for it to
+      # finish so our built site always deploys last and wins.
+      - name: Wait for branch-based Pages build (avoid deploy race)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 30); do
+            pending=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/runs?head_sha=${{ github.sha }}&per_page=100" \
+              | jq '[.workflow_runs[] | select(.name == "pages-build-deployment") | select(.status != "completed")] | length')
+            if [ "$pending" = "0" ]; then
+              echo "No branch-based Pages build in progress — safe to deploy."
+              exit 0
+            fi
+            echo "Waiting for pages-build-deployment ($pending in progress)…"
+            sleep 10
+          done
+          echo "Timed out waiting — deploying anyway."
       - id: deployment
         uses: actions/deploy-pages@v4
