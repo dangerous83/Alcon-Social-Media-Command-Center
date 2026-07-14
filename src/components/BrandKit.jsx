@@ -95,6 +95,14 @@ export default function BrandKit({ client, onSave }) {
           placeholder="e.g. Confident and technical, but never jargon-heavy. Short sentences. No exclamation marks."
         />
 
+        <h3 className="label-caps mb-2 mt-6">AI photo direction</h3>
+        <textarea
+          className="field min-h-[80px] resize-y"
+          value={brand.photoStyle || ''}
+          onChange={(e) => set('photoStyle', e.target.value)}
+          placeholder="e.g. dark moody tech scenes, people in modern offices, blue neon accents — guides every AI-generated photo for this client"
+        />
+
         <h3 className="label-caps mb-2 mt-6">Pronunciation & style rules</h3>
         <textarea
           className="field min-h-[160px] resize-y font-mono text-[13px]"
